@@ -1,11 +1,15 @@
 name: Build and Deploy App to AWS
 
+defaults:
+  run:
+    working-directory: application
+
 on:
   workflow_dispatch:
   
   push:
     branches:
-      - main
+      - application/**
 
 permissions:
   id-token: write
