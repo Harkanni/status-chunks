@@ -14,9 +14,9 @@ variable "github_repositories" {
   type = list(string)
 
   description = "Repositories allowed to assume the GitHub OIDC role"
-
-#   example = [
-#     "Harkanni/frontend",
-#     "Harkanni/infrastructure"
-#   ]
+  default = [
+    "Harkanni/status-chunks",
+    "Harkanni/starttech-infra",
+    "Harkanni/starttech-application"
+  ]
 }
