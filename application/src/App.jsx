@@ -13,7 +13,6 @@ const PRESETS = [
   { label: '90s · WhatsApp status', value: 90 },
 ]
 
-
 function formatBytes(bytes) {
   if (!bytes && bytes !== 0) return ''
   const units = ['B', 'KB', 'MB', 'GB']
