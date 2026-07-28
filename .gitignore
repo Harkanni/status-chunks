@@ -3,3 +3,37 @@ dist
 .DS_Store
 
 infra/
+# Terraform working directory
+infra/.terraform/
+
+# Terraform state
+infra/*.tfstate
+infra/*.tfstate.*
+
+# Crash logs
+infra/crash.log
+
+# Variable files containing secrets
+infra/*.tfvars
+infra/*.tfvars.json
+
+# Override files
+infra/override.tf
+infra/override.tf.json
+infra/*_override.tf
+infra/*_override.tf.json
+
+# Terraform lock file (choose based on your team)
+# Ignore it:
+# infra/.terraform.lock.hcl
+
+# OR (recommended) commit it for provider version consistency
+# !infra/.terraform.lock.hcl
+
+# Terraform plans
+infra/*.tfplan
+infra/plan.out
+
+# Local CLI configuration
+infra/.terraformrc
+infra/terraform.rc
