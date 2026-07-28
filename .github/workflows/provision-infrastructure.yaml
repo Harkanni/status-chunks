@@ -1,5 +1,9 @@
 name: AWS Infra Deploy
 
+defaults:
+  run:
+    working-directory: infra
+
 on:
   push:
     branches:
@@ -28,7 +32,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        run: terraform init
+        run: terraform init ../infra
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
