@@ -1,6 +1,8 @@
 name: Build and Deploy App to AWS
 
 on:
+  workflow_dispatch:
+  
   push:
     branches:
       - main
@@ -30,7 +32,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsWorkflowRole
+          role-to-assume: arn:aws:iam::851438481377:role/GitHubActionsWorkflowRole
           aws-region: us-east-1
 
       - name: Deploy to S3
