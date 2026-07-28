@@ -14,7 +14,7 @@ infra/*.tfstate.*
 infra/crash.log
 
 # Variable files containing secrets
-infra/*.tfvars
+infra/*.tfvars.*
 infra/*.tfvars.json
 
 # Override files

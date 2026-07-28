@@ -9,5 +9,5 @@ module "oidc" {
 
   repositories = var.github_repositories
 
-  role_name = "GitHubActionsRole"
+  role_name = "GitHubActionsWorkflowRole"
 }
