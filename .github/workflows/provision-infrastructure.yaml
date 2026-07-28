@@ -3,6 +3,8 @@ name: AWS Infra Deploy
 on:
   push:
     branches:
+      - main
+    paths:
       - infra/**
 
 permissions:

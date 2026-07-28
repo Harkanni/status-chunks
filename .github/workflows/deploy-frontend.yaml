@@ -9,6 +9,8 @@ on:
   
   push:
     branches:
+      - main
+    paths:      
       - application/**
 
 permissions:
@@ -27,6 +29,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
+          cache-dependency-path: application/package-lock.json
 
       - name: Install and Build
         run: |
@@ -41,7 +44,7 @@ jobs:
 
       - name: Deploy to S3
         run: |
-          aws s3 sync dist/ s3://your-vite-app-bucket-name --delete
+          aws s3 sync dist/ s3://whatsapp-status-chunker-bucket --delete
 
       - name: Invalidate CloudFront Cache
         run: |
