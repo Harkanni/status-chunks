@@ -10,7 +10,6 @@ variable "bucket_name" {
   default     = "whatsapp-status-chunker-bucket"
 }
 
-
 variable "github_repositories" {
   type = list(string)
 
