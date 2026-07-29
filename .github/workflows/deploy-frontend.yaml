@@ -12,6 +12,7 @@ on:
       - main
     paths:      
       - application/**
+      - ".github/workflows/deploy-frontend.yaml"
 
 permissions:
   contents: read

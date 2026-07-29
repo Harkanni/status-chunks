@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - infra/**
+      - .github/workflows/deploy-backend.yaml
 
 permissions:
   contents: read
