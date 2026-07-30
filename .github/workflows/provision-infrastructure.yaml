@@ -4,6 +4,7 @@ defaults:
   run:
     working-directory: infra
 
+
 on:
   push:
     branches:
@@ -11,7 +12,6 @@ on:
     paths:
       - infra/**
       - ".github/workflows/provision-infrastructure.yaml"
-
 
 permissions:
   contents: read
