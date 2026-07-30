@@ -13,6 +13,7 @@
     "@ffmpeg/ffmpeg": "^0.12.10",
     "@ffmpeg/util": "^0.12.1",
     "jszip": "^3.10.1",
+    "posthog-js": "^1.408.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

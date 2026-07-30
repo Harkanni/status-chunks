@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile, toBlobURL } from '@ffmpeg/util'
 import JSZip from 'jszip'
+import posthog from 'posthog-js'
 
 const CORE_VERSION = '0.12.10'
 // const CORE_BASE = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/esm`
@@ -144,6 +145,12 @@ export default function App() {
     setDuration(null)
     setVideoFile(file)
     setVideoURL(file ? URL.createObjectURL(file) : null)
+    if (file) {
+      posthog.capture('video_uploaded', {
+        file_type: file.type,
+        file_size_bytes: file.size,
+      })
+    }
   }
 
   function handleFileInput(e) {
@@ -165,6 +172,13 @@ export default function App() {
     setProgress(0)
     chunks.forEach((c) => URL.revokeObjectURL(c.url))
     setChunks([])
+
+    posthog.capture('split_started', {
+      chunk_seconds: chunkSeconds,
+      cut_mode: mode,
+      video_duration_seconds: duration,
+      file_size_bytes: videoFile.size,
+    })
 
     try {
       const ffmpeg = await getFFmpeg()
@@ -222,7 +236,19 @@ export default function App() {
       await ffmpeg.deleteFile(inputName)
 
       setChunks(results)
+      posthog.capture('split_completed', {
+        chunk_count: results.length,
+        chunk_seconds: chunkSeconds,
+        cut_mode: mode,
+        video_duration_seconds: duration,
+      })
     } catch (e) {
+      posthog.captureException(e, { cut_mode: mode, chunk_seconds: chunkSeconds })
+      posthog.capture('split_failed', {
+        error_message: e.message || String(e),
+        cut_mode: mode,
+        chunk_seconds: chunkSeconds,
+      })
       setError(e.message || String(e))
     } finally {
       setProcessing(false)
@@ -246,6 +272,10 @@ export default function App() {
       a.download = 'status-clips.zip'
       a.click()
       URL.revokeObjectURL(url)
+      posthog.capture('all_clips_downloaded', {
+        clip_count: chunks.length,
+        total_size_bytes: chunks.reduce((sum, c) => sum + c.size, 0),
+      })
     } finally {
       setZipping(false)
     }
@@ -331,7 +361,10 @@ export default function App() {
                 <button
                   key={p.value}
                   className={`preset ${chunkSeconds === p.value ? 'selected' : ''}`}
-                  onClick={() => setChunkSeconds(p.value)}
+                  onClick={() => {
+                    setChunkSeconds(p.value)
+                    posthog.capture('clip_length_preset_selected', { preset_seconds: p.value, preset_label: p.label })
+                  }}
                   type="button"
                 >
                   {p.label}
@@ -347,7 +380,7 @@ export default function App() {
             <div className="mode-toggle">
               <button
                 className={mode === 'fast' ? 'selected' : ''}
-                onClick={() => setMode('fast')}
+                onClick={() => { setMode('fast'); posthog.capture('cut_mode_changed', { cut_mode: 'fast' }) }}
                 type="button"
               >
                 Fast
@@ -355,7 +388,7 @@ export default function App() {
               </button>
               <button
                 className={mode === 'precise' ? 'selected' : ''}
-                onClick={() => setMode('precise')}
+                onClick={() => { setMode('precise'); posthog.capture('cut_mode_changed', { cut_mode: 'precise' }) }}
                 type="button"
               >
                 Precise
@@ -398,7 +431,12 @@ export default function App() {
                   <span className="chunk-index">{String(i + 1).padStart(2, '0')}</span>
                   <span className="chunk-size">{formatBytes(c.size)}</span>
                 </div>
-                <a className="download-btn" href={c.url} download={c.name}>
+                <a
+                  className="download-btn"
+                  href={c.url}
+                  download={c.name}
+                  onClick={() => posthog.capture('clip_downloaded', { clip_index: i + 1, clip_size_bytes: c.size })}
+                >
                   Download
                 </a>
               </div>
