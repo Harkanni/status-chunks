@@ -19,7 +19,7 @@ resource "aws_s3_bucket_public_access_block" "this" {
 
 resource "aws_cloudfront_origin_access_control" "this" {
 
-  name                              = "${var.bucket_name}-oac"
+  name = "${var.bucket_name}-oac"
 
   origin_access_control_origin_type = "s3"
 
@@ -31,7 +31,7 @@ resource "aws_cloudfront_origin_access_control" "this" {
 
 resource "aws_cloudfront_distribution" "this" {
 
-  enabled             = true
+  enabled = true
 
   default_root_object = "index.html"
 
@@ -46,27 +46,22 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   default_cache_behavior {
-
     target_origin_id = "S3Origin"
-
-    allowed_methods = ["GET","HEAD"]
-
-    cached_methods = ["GET","HEAD"]
-
+    allowed_methods = ["GET", "HEAD"]
+    cached_methods = ["GET", "HEAD"]
     viewer_protocol_policy = "redirect-to-https"
 
     forwarded_values {
-
       query_string = false
-
       cookies {
-
         forward = "none"
-
       }
-
     }
 
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_router.arn
+    }
   }
 
   restrictions {
@@ -105,6 +100,14 @@ resource "aws_cloudfront_distribution" "this" {
 
   }
 
+}
+
+resource "aws_cloudfront_function" "spa_router" {
+  name    = "status-splitter-spa-router"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+
+  code = file("${path.module}/cloudfront-function.js")
 }
 
 
