@@ -12,7 +12,7 @@ on:
       - main
     paths:
       - landing/**
-      - .github/workflows/deploy-landing.yaml
+      - ".github/workflows/deploy-landing-page.yaml"
 
 permissions:
   contents: read
