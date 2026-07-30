@@ -9,9 +9,9 @@ on:
   push:
     branches:
       - main
-    paths:
-      - infra/**
-      - ".github/workflows/provision-infrastructure.yaml"
+    # paths:
+    #   - infra/**
+    #   - ".github/workflows/provision-infrastructure.yaml"
 
 permissions:
   contents: read

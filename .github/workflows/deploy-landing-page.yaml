@@ -11,9 +11,9 @@ on:
   push:
     branches:
       - main
-    paths:
-      - landing/**
-      - ".github/workflows/deploy-landing-page.yaml"
+    # paths:
+    #   - landing/**
+    #   - ".github/workflows/deploy-landing-page.yaml"
 
 permissions:
   contents: read
