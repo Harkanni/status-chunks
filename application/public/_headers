@@ -1,2 +1,4 @@
-/app/ffmpeg/*
-  Cache-Control: public, max-age=31536000, immutable
+[[headers]]
+  for = "/app/ffmpeg/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
