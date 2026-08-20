@@ -1,51 +1,50 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { FFmpeg } from '@ffmpeg/ffmpeg'
-import { fetchFile, toBlobURL } from '@ffmpeg/util'
-import JSZip from 'jszip'
-import posthog from 'posthog-js'
+import { useEffect, useRef, useState, useCallback } from "react";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import JSZip from "jszip";
+import posthog from "posthog-js";
 
-
-const CORE_VERSION = '0.12.10'
+const CORE_VERSION = "0.12.10";
 // const CORE_BASE = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/esm`
 // const CORE_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/esm`
-const CORE_BASE = `${import.meta.env.BASE_URL}ffmpeg`
-const URL_BASE = `${import.meta.env.BASE_URL}`
+const CORE_BASE = `${import.meta.env.BASE_URL}ffmpeg`;
+const URL_BASE = `${import.meta.env.BASE_URL}`;
 
 const PRESETS = [
-  { label: '30s', value: 30 },
-  { label: '60s', value: 60 },
-  { label: '90s · WhatsApp status', value: 90 },
-]
+  { label: "30s", value: 30 },
+  { label: "60s", value: 60 },
+  { label: "90s · WhatsApp status", value: 90 },
+];
 
 function formatBytes(bytes) {
-  if (!bytes && bytes !== 0) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let n = bytes
+  if (!bytes && bytes !== 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  let n = bytes;
   while (n >= 1024 && i < units.length - 1) {
-    n /= 1024
-    i++
+    n /= 1024;
+    i++;
   }
-  return `${n.toFixed(1)} ${units[i]}`
+  return `${n.toFixed(1)} ${units[i]}`;
 }
 
 function formatTime(seconds) {
-  if (!seconds && seconds !== 0) return '--:--'
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${String(s).padStart(2, '0')}`
+  if (!seconds && seconds !== 0) return "--:--";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 // The filmstrip: a horizontal strip of perforated segments showing exactly
 // where the cuts will land before any processing happens.
 function Filmstrip({ duration, chunkSeconds }) {
-  if (!duration || !chunkSeconds) return null
-  const count = Math.max(1, Math.ceil(duration / chunkSeconds))
+  if (!duration || !chunkSeconds) return null;
+  const count = Math.max(1, Math.ceil(duration / chunkSeconds));
   const segments = Array.from({ length: count }, (_, i) => {
-    const start = i * chunkSeconds
-    const end = Math.min(duration, start + chunkSeconds)
-    return { start, end, length: end - start }
-  })
+    const start = i * chunkSeconds;
+    const end = Math.min(duration, start + chunkSeconds);
+    return { start, end, length: end - start };
+  });
 
   return (
     <div className="filmstrip-wrap">
@@ -63,7 +62,9 @@ function Filmstrip({ duration, chunkSeconds }) {
               ))}
             </div>
             <div className="frame-label">
-              <span className="frame-index">{String(i + 1).padStart(2, '0')}</span>
+              <span className="frame-index">
+                {String(i + 1).padStart(2, "0")}
+              </span>
               <span className="frame-len">{Math.round(seg.length)}s</span>
             </div>
             <div className="sprockets bottom">
@@ -75,215 +76,261 @@ function Filmstrip({ duration, chunkSeconds }) {
         ))}
       </div>
       <p className="filmstrip-caption">
-        {count} clip{count === 1 ? '' : 's'} · last one is{' '}
+        {count} clip{count === 1 ? "" : "s"} · last one is{" "}
         {Math.round(segments[segments.length - 1].length)}s
       </p>
     </div>
-  )
+  );
 }
 
 export default function App() {
-  const ffmpegRef = useRef(null)
-  const [coreLoaded, setCoreLoaded] = useState(false)
-  const [coreLoading, setCoreLoading] = useState(false)
+  const ffmpegRef = useRef(null);
+  const loadPromiseRef = useRef(null);
+  const [coreLoaded, setCoreLoaded] = useState(false);
+  const [coreLoading, setCoreLoading] = useState(false);
 
-  const [videoFile, setVideoFile] = useState(null)
-  const [videoURL, setVideoURL] = useState(null)
-  const [duration, setDuration] = useState(null)
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoURL, setVideoURL] = useState(null);
+  const [duration, setDuration] = useState(null);
 
-  const [chunkSeconds, setChunkSeconds] = useState(90)
-  const [mode, setMode] = useState('fast') // 'fast' (stream copy) | 'precise' (re-encode)
+  const [chunkSeconds, setChunkSeconds] = useState(90);
+  const [mode, setMode] = useState("fast"); // 'fast' (stream copy) | 'precise' (re-encode)
 
-  const [processing, setProcessing] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [statusMsg, setStatusMsg] = useState('')
-  const [error, setError] = useState(null)
-  const [chunks, setChunks] = useState([])
-  const [zipping, setZipping] = useState(false)
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [error, setError] = useState(null);
+  const [chunks, setChunks] = useState([]);
+  const [zipping, setZipping] = useState(false);
 
-  const dropRef = useRef(null)
-  const [dragActive, setDragActive] = useState(false)
+  const dropRef = useRef(null);
+  const [dragActive, setDragActive] = useState(false);
 
   const getFFmpeg = useCallback(async () => {
-    if (ffmpegRef.current) return ffmpegRef.current
-    const ffmpeg = new FFmpeg()
-    ffmpeg.on('progress', ({ progress: p }) => {
-      if (typeof p === 'number' && !Number.isNaN(p)) {
-        setProgress(Math.min(100, Math.max(0, Math.round(p * 100))))
-      }
-    })
-    ffmpeg.on('log', ({ message }) => {
-      setStatusMsg(message)
-    })
-
-    setCoreLoading(true)
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
-    })
-    setCoreLoading(false)
-    setCoreLoaded(true)
-    ffmpegRef.current = ffmpeg
-    return ffmpeg
-  }, [])
-
-  // Preload the engine as soon as a file is picked, so the "Split" click feels instant.
-  useEffect(() => {
-    if (videoFile && !ffmpegRef.current && !coreLoading) {
-      getFFmpeg()
-      .catch((e) => {
-        console.error(e)
-        console.error(e.stack)
-        setError(e.message)
-})
+    if (ffmpegRef.current) return ffmpegRef.current;
+    if (loadPromiseRef.current) {
+      // A load is already in flight (from the mount-time preload) — wait on it
+      // instead of starting a duplicate download.
+      return loadPromiseRef.current;
     }
-  }, [])
+
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on("progress", ({ progress: p }) => {
+      if (typeof p === "number" && !Number.isNaN(p)) {
+        setProgress(Math.min(100, Math.max(0, Math.round(p * 100))));
+      }
+    });
+    ffmpeg.on("log", ({ message }) => {
+      setStatusMsg(message);
+    });
+
+    setCoreLoading(true);
+    loadPromiseRef.current = ffmpeg
+      .load({
+        coreURL: await toBlobURL(
+          `${CORE_BASE}/ffmpeg-core.js`,
+          "text/javascript",
+        ),
+        wasmURL: await toBlobURL(
+          `${CORE_BASE}/ffmpeg-core.wasm`,
+          "application/wasm",
+        ),
+      })
+      .then(() => {
+        setCoreLoading(false);
+        setCoreLoaded(true);
+        ffmpegRef.current = ffmpeg;
+        return ffmpeg;
+      });
+
+    return loadPromiseRef.current;
+  }, []);
+
+  // Preload the engine as soon as the page loads, so the "Split" click feels
+  // instant regardless of when the user picks a file. Intentionally runs once
+  // on mount only — getFFmpeg() itself guards against duplicate loads.
+  useEffect(() => {
+    getFFmpeg().catch((e) => {
+      console.error(e);
+      console.error(e.stack);
+      setError(e.message);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function resetForNewFile(file) {
-    chunks.forEach((c) => URL.revokeObjectURL(c.url))
-    setChunks([])
-    setError(null)
-    setProgress(0)
-    setStatusMsg('')
-    setDuration(null)
-    setVideoFile(file)
-    setVideoURL(file ? URL.createObjectURL(file) : null)
+    chunks.forEach((c) => URL.revokeObjectURL(c.url));
+    setChunks([]);
+    setError(null);
+    setProgress(0);
+    setStatusMsg("");
+    setDuration(null);
+    setVideoFile(file);
+    setVideoURL(file ? URL.createObjectURL(file) : null);
     if (file) {
-      posthog.capture('video_uploaded', {
+      posthog.capture("video_uploaded", {
         file_type: file.type,
         file_size_bytes: file.size,
-      })
+      });
     }
   }
 
   function handleFileInput(e) {
-    const file = e.target.files?.[0]
-    if (file) resetForNewFile(file)
+    const file = e.target.files?.[0];
+    if (file) resetForNewFile(file);
   }
 
   function handleDrop(e) {
-    e.preventDefault()
-    setDragActive(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file && file.type.startsWith('video/')) resetForNewFile(file)
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith("video/")) resetForNewFile(file);
   }
 
   async function handleSplit() {
-    if (!videoFile) return
-    setProcessing(true)
-    setError(null)
-    setProgress(0)
-    chunks.forEach((c) => URL.revokeObjectURL(c.url))
-    setChunks([])
+    if (!videoFile) return;
+    setProcessing(true);
+    setError(null);
+    setProgress(0);
+    chunks.forEach((c) => URL.revokeObjectURL(c.url));
+    setChunks([]);
 
-    posthog.capture('split_started', {
+    posthog.capture("split_started", {
       chunk_seconds: chunkSeconds,
       cut_mode: mode,
       video_duration_seconds: duration,
       file_size_bytes: videoFile.size,
-    })
+    });
 
     try {
-      const ffmpeg = await getFFmpeg()
-      const inputName = 'input' + (videoFile.name.match(/\.\w+$/)?.[0] || '.mp4')
-      await ffmpeg.writeFile(inputName, await fetchFile(videoFile))
+      const ffmpeg = await getFFmpeg();
+      const inputName =
+        "input" + (videoFile.name.match(/\.\w+$/)?.[0] || ".mp4");
+      await ffmpeg.writeFile(inputName, await fetchFile(videoFile));
 
-      const outPattern = 'chunk_%03d.mp4'
+      const outPattern = "chunk_%03d.mp4";
       const args =
-        mode === 'fast'
+        mode === "fast"
           ? [
-              '-i', inputName,
-              '-map', '0',
-              '-c', 'copy',
-              '-f', 'segment',
-              '-segment_time', String(chunkSeconds),
-              '-reset_timestamps', '1',
+              "-i",
+              inputName,
+              "-map",
+              "0",
+              "-c",
+              "copy",
+              "-f",
+              "segment",
+              "-segment_time",
+              String(chunkSeconds),
+              "-reset_timestamps",
+              "1",
               outPattern,
             ]
           : [
-              '-i', inputName,
-              '-map', '0',
-              '-c:v', 'libx264',
-              '-preset', 'veryfast',
-              '-crf', '23',
-              '-c:a', 'aac',
-              '-b:a', '128k',
-              '-f', 'segment',
-              '-segment_time', String(chunkSeconds),
-              '-reset_timestamps', '1',
+              "-i",
+              inputName,
+              "-map",
+              "0",
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-crf",
+              "23",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "128k",
+              "-f",
+              "segment",
+              "-segment_time",
+              String(chunkSeconds),
+              "-reset_timestamps",
+              "1",
               outPattern,
-            ]
+            ];
 
-      await ffmpeg.exec(args)
+      await ffmpeg.exec(args);
 
-      const entries = await ffmpeg.listDir('/')
+      const entries = await ffmpeg.listDir("/");
       const chunkFiles = entries
         .filter((e) => !e.isDir && /^chunk_\d+\.mp4$/.test(e.name))
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       if (chunkFiles.length === 0) {
-        throw new Error('No output was produced — the video may be in an unsupported format.')
+        throw new Error(
+          "No output was produced — the video may be in an unsupported format.",
+        );
       }
 
-      const results = []
+      const results = [];
       for (const entry of chunkFiles) {
-        const data = await ffmpeg.readFile(entry.name)
-        const blob = new Blob([data.buffer], { type: 'video/mp4' })
+        const data = await ffmpeg.readFile(entry.name);
+        const blob = new Blob([data.buffer], { type: "video/mp4" });
         results.push({
-          name: entry.name.replace('chunk_', `${videoFile.name.replace(/\.\w+$/, '')}_part`),
+          name: entry.name.replace(
+            "chunk_",
+            `${videoFile.name.replace(/\.\w+$/, "")}_part`,
+          ),
           url: URL.createObjectURL(blob),
           blob,
           size: blob.size,
-        })
-        await ffmpeg.deleteFile(entry.name)
+        });
+        await ffmpeg.deleteFile(entry.name);
       }
-      await ffmpeg.deleteFile(inputName)
+      await ffmpeg.deleteFile(inputName);
 
-      setChunks(results)
-      posthog.capture('split_completed', {
+      setChunks(results);
+      posthog.capture("split_completed", {
         chunk_count: results.length,
         chunk_seconds: chunkSeconds,
         cut_mode: mode,
         video_duration_seconds: duration,
-      })
+      });
     } catch (e) {
-      posthog.captureException(e, { cut_mode: mode, chunk_seconds: chunkSeconds })
-      posthog.capture('split_failed', {
+      posthog.captureException(e, {
+        cut_mode: mode,
+        chunk_seconds: chunkSeconds,
+      });
+      posthog.capture("split_failed", {
         error_message: e.message || String(e),
         cut_mode: mode,
         chunk_seconds: chunkSeconds,
-      })
-      setError(e.message || String(e))
+      });
+      setError(e.message || String(e));
     } finally {
-      setProcessing(false)
-      setStatusMsg('')
+      setProcessing(false);
+      setStatusMsg("");
     }
   }
 
   async function handleDownloadAll() {
-    setZipping(true)
+    setZipping(true);
     try {
-      const zip = new JSZip()
+      const zip = new JSZip();
       for (const c of chunks) {
-        zip.file(c.name, c.blob)
+        zip.file(c.name, c.blob);
       }
-      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'status-clips.zip'
-      a.click()
-      URL.revokeObjectURL(url)
-      posthog.capture('all_clips_downloaded', {
+      const blob = await zip.generateAsync({
+        type: "blob",
+        compression: "STORE",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "status-clips.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+      posthog.capture("all_clips_downloaded", {
         clip_count: chunks.length,
         total_size_bytes: chunks.reduce((sum, c) => sum + c.size, 0),
-      })
+      });
     } finally {
-      setZipping(false)
+      setZipping(false);
     }
   }
 
-  const canSplit = videoFile && duration && !processing
+  const canSplit = videoFile && duration && !processing;
 
   return (
     <div className="page">
@@ -296,17 +343,18 @@ export default function App() {
           <h1>Status Splitter</h1>
           <p className="subtitle">
             Drop in a video, set the clip length, get back status-ready chunks.
-            Everything is cut right here in your browser — nothing is uploaded anywhere.
+            Everything is cut right here in your browser — nothing is uploaded
+            anywhere.
           </p>
         </div>
       </header>
 
       <section
         ref={dropRef}
-        className={`dropzone ${dragActive ? 'active' : ''} ${videoFile ? 'has-file' : ''}`}
+        className={`dropzone ${dragActive ? "active" : ""} ${videoFile ? "has-file" : ""}`}
         onDragOver={(e) => {
-          e.preventDefault()
-          setDragActive(true)
+          e.preventDefault();
+          setDragActive(true);
         }}
         onDragLeave={() => setDragActive(false)}
         onDrop={handleDrop}
@@ -317,7 +365,12 @@ export default function App() {
             <p className="drop-sub">or</p>
             <label className="file-btn">
               Choose a file
-              <input type="file" accept="video/*" onChange={handleFileInput} hidden />
+              <input
+                type="file"
+                accept="video/*"
+                onChange={handleFileInput}
+                hidden
+              />
             </label>
           </>
         ) : (
@@ -331,11 +384,17 @@ export default function App() {
             <div className="preview-meta">
               <p className="file-name">{videoFile.name}</p>
               <p className="file-sub">
-                {formatBytes(videoFile.size)} · {duration ? formatTime(duration) : 'reading…'}
+                {formatBytes(videoFile.size)} ·{" "}
+                {duration ? formatTime(duration) : "reading…"}
               </p>
               <label className="file-btn subtle">
                 Choose a different file
-                <input type="file" accept="video/*" onChange={handleFileInput} hidden />
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileInput}
+                  hidden
+                />
               </label>
             </div>
           </div>
@@ -362,10 +421,13 @@ export default function App() {
               {PRESETS.map((p) => (
                 <button
                   key={p.value}
-                  className={`preset ${chunkSeconds === p.value ? 'selected' : ''}`}
+                  className={`preset ${chunkSeconds === p.value ? "selected" : ""}`}
                   onClick={() => {
-                    setChunkSeconds(p.value)
-                    posthog.capture('clip_length_preset_selected', { preset_seconds: p.value, preset_label: p.label })
+                    setChunkSeconds(p.value);
+                    posthog.capture("clip_length_preset_selected", {
+                      preset_seconds: p.value,
+                      preset_label: p.label,
+                    });
                   }}
                   type="button"
                 >
@@ -381,35 +443,50 @@ export default function App() {
             <label>Cut mode</label>
             <div className="mode-toggle">
               <button
-                className={mode === 'fast' ? 'selected' : ''}
-                onClick={() => { setMode('fast'); posthog.capture('cut_mode_changed', { cut_mode: 'fast' }) }}
+                className={mode === "fast" ? "selected" : ""}
+                onClick={() => {
+                  setMode("fast");
+                  posthog.capture("cut_mode_changed", { cut_mode: "fast" });
+                }}
                 type="button"
               >
                 Fast
                 <span>No re-encoding · cuts land on the nearest keyframe</span>
               </button>
               <button
-                className={mode === 'precise' ? 'selected' : ''}
-                onClick={() => { setMode('precise'); posthog.capture('cut_mode_changed', { cut_mode: 'precise' }) }}
+                className={mode === "precise" ? "selected" : ""}
+                onClick={() => {
+                  setMode("precise");
+                  posthog.capture("cut_mode_changed", { cut_mode: "precise" });
+                }}
                 type="button"
               >
                 Precise
-                <span>Re-encodes · every clip is exactly the length you set</span>
+                <span>
+                  Re-encodes · every clip is exactly the length you set
+                </span>
               </button>
             </div>
           </div>
 
-          <button className="split-btn" onClick={handleSplit} disabled={!canSplit}>
+          <button
+            className="split-btn"
+            onClick={handleSplit}
+            disabled={!canSplit}
+          >
             {processing
               ? `Cutting… ${progress}%`
               : coreLoading
-              ? 'Loading engine…'
-              : `Split into ${Math.ceil((duration || 0) / chunkSeconds) || ''} clips`}
+                ? "Loading engine…"
+                : `Split into ${Math.ceil((duration || 0) / chunkSeconds) || ""} clips`}
           </button>
 
           {processing && (
             <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
+              <div
+                className="progress-fill"
+                style={{ width: `${progress}%` }}
+              />
             </div>
           )}
           {processing && statusMsg && <p className="log-line">{statusMsg}</p>}
@@ -421,8 +498,12 @@ export default function App() {
         <section className="results">
           <div className="results-head">
             <h2>{chunks.length} clips ready</h2>
-            <button className="zip-btn" onClick={handleDownloadAll} disabled={zipping}>
-              {zipping ? 'Zipping…' : 'Download all (.zip)'}
+            <button
+              className="zip-btn"
+              onClick={handleDownloadAll}
+              disabled={zipping}
+            >
+              {zipping ? "Zipping…" : "Download all (.zip)"}
             </button>
           </div>
           <div className="chunk-grid">
@@ -430,14 +511,21 @@ export default function App() {
               <div className="chunk-card" key={c.url}>
                 <video src={c.url} controls />
                 <div className="chunk-meta">
-                  <span className="chunk-index">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="chunk-index">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
                   <span className="chunk-size">{formatBytes(c.size)}</span>
                 </div>
                 <a
                   className="download-btn"
                   href={c.url}
                   download={c.name}
-                  onClick={() => posthog.capture('clip_downloaded', { clip_index: i + 1, clip_size_bytes: c.size })}
+                  onClick={() =>
+                    posthog.capture("clip_downloaded", {
+                      clip_index: i + 1,
+                      clip_size_bytes: c.size,
+                    })
+                  }
                 >
                   Download
                 </a>
@@ -449,10 +537,11 @@ export default function App() {
 
       <footer className="footnote">
         <p>
-          First split downloads a ~30&nbsp;MB video engine from a CDN (cached after that — do it on
-          Wi-Fi). Every split after that runs fully offline.
+          Downloads a ~30&nbsp;MB video engine on page load (cached after
+          that — best on Wi-Fi). Every split runs fully offline once it's
+          ready.
         </p>
       </footer>
     </div>
-  )
+  );
 }
