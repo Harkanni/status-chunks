@@ -1,5 +1,1 @@
-# Proxy all /app traffic to the web app site
-/app/*   https://netlify.app  200!
-
-# Your standard React fallback rule for the landing page (keeps this at the bottom)
-/*       /index.html                               200
+/*    /index.html   200
