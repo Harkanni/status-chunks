@@ -2,13 +2,8 @@
   command = """
     npm install --prefix landing && npm run build --prefix landing && \
     npm install --prefix application && npm run build --prefix application && \
-    rm -rf publish && mkdir -p publish/application && \
+    rm -rf publish && mkdir -p publish/app && \
     cp -r landing/dist/. publish/ && \
-    cp -r application/dist/. publish/application/
+    cp -r application/dist/. publish/app/
   """
   publish = "publish"
-
-  [[redirects]]
-  from = "/app/*"
-  to = "/app/index.html"
-  status = 200
