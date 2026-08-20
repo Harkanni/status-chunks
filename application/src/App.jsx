@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import { fetchFile } from "@ffmpeg/util";
 import JSZip from "jszip";
 import posthog from "posthog-js";
 
@@ -15,6 +15,35 @@ const PRESETS = [
   { label: "60s", value: 60 },
   { label: "90s · WhatsApp status", value: 90 },
 ];
+
+// Manually persist the ffmpeg engine files via the Cache Storage API instead
+// of relying on the server's Cache-Control headers (which may be missing or
+// set to no-store, causing a fresh ~9MB wasm download on every page load).
+// This guarantees a one-time fetch per CORE_VERSION, regardless of hosting.
+const ENGINE_CACHE_NAME = `status-splitter-ffmpeg-${CORE_VERSION}`;
+
+async function cachedFetch(url) {
+  if (!("caches" in window)) {
+    // No Cache Storage support (very old browser) — just fetch normally.
+    return fetch(url);
+  }
+  const cache = await caches.open(ENGINE_CACHE_NAME);
+  const hit = await cache.match(url);
+  if (hit) return hit;
+
+  const response = await fetch(url);
+  if (response.ok) {
+    // Clone before caching — a Response body can only be read once.
+    cache.put(url, response.clone());
+  }
+  return response;
+}
+
+async function cachedToBlobURL(url, mimeType) {
+  const response = await cachedFetch(url);
+  const blob = await response.blob();
+  return URL.createObjectURL(new Blob([blob], { type: mimeType }));
+}
 
 function formatBytes(bytes) {
   if (!bytes && bytes !== 0) return "";
@@ -127,11 +156,11 @@ export default function App() {
     setCoreLoading(true);
     loadPromiseRef.current = ffmpeg
       .load({
-        coreURL: await toBlobURL(
+        coreURL: await cachedToBlobURL(
           `${CORE_BASE}/ffmpeg-core.js`,
           "text/javascript",
         ),
-        wasmURL: await toBlobURL(
+        wasmURL: await cachedToBlobURL(
           `${CORE_BASE}/ffmpeg-core.wasm`,
           "application/wasm",
         ),
@@ -146,15 +175,28 @@ export default function App() {
     return loadPromiseRef.current;
   }, []);
 
-  // Preload the engine as soon as the page loads, so the "Split" click feels
-  // instant regardless of when the user picks a file. Intentionally runs once
-  // on mount only — getFFmpeg() itself guards against duplicate loads.
+  // Preload the engine so the "Split" click feels instant regardless of when
+  // the user picks a file — but only after the page itself has finished
+  // loading (all initial resources in), so the ~30MB download doesn't
+  // compete with the page's own paint/resources. Intentionally runs once —
+  // getFFmpeg() itself guards against duplicate loads.
   useEffect(() => {
-    getFFmpeg().catch((e) => {
-      console.error(e);
-      console.error(e.stack);
-      setError(e.message);
-    });
+    const startPreload = () => {
+      getFFmpeg().catch((e) => {
+        console.error(e);
+        console.error(e.stack);
+        setError(e.message);
+      });
+    };
+
+    if (document.readyState === "complete") {
+      // Page already finished loading before this effect ran.
+      startPreload();
+      return;
+    }
+
+    window.addEventListener("load", startPreload, { once: true });
+    return () => window.removeEventListener("load", startPreload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
