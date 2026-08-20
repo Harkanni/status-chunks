@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import screenshot from "./assets/status-splitter.png";
 
-const appUrl = "https://d3hvnnpojjllyw.cloudfront.net/app";
+const appUrl = "/app";
 
 function Logo() {
   return (

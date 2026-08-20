@@ -7,7 +7,9 @@ import posthog from 'posthog-js'
 
 const CORE_VERSION = '0.12.10'
 // const CORE_BASE = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/esm`
-const CORE_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/esm`
+// const CORE_BASE = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/esm`
+const CORE_BASE = `${import.meta.env.BASE_URL}ffmpeg`
+const URL_BASE = `${import.meta.env.BASE_URL}`
 
 const PRESETS = [
   { label: '30s', value: 30 },
@@ -135,7 +137,7 @@ export default function App() {
         setError(e.message)
 })
     }
-  }, [videoFile, coreLoading, getFFmpeg])
+  }, [])
 
   function resetForNewFile(file) {
     chunks.forEach((c) => URL.revokeObjectURL(c.url))
@@ -230,6 +232,7 @@ export default function App() {
         results.push({
           name: entry.name.replace('chunk_', `${videoFile.name.replace(/\.\w+$/, '')}_part`),
           url: URL.createObjectURL(blob),
+          blob,
           size: blob.size,
         })
         await ffmpeg.deleteFile(entry.name)
@@ -262,11 +265,9 @@ export default function App() {
     try {
       const zip = new JSZip()
       for (const c of chunks) {
-        const res = await fetch(c.url)
-        const buf = await res.arrayBuffer()
-        zip.file(c.name, buf)
+        zip.file(c.name, c.blob)
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
