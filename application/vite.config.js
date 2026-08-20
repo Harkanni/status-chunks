@@ -20,12 +20,12 @@ export default defineConfig({
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'favicon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'favicon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable',
